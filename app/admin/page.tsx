@@ -7,7 +7,7 @@ import { TIME_SLOTS } from '@/lib/utils';
 import {
   Calendar, Clock, CheckCircle, XCircle, Trash2, LogOut, Search,
   FileSpreadsheet, Plus, Utensils, Carrot, Megaphone,
-  PhoneCall, Pencil, X, Lock, Unlock, UserCheck
+  PhoneCall, Pencil, X, Lock, Unlock, UserCheck, ShoppingBag
 } from 'lucide-react';
 
 const INGREDIENT_CATEGORIES = [
@@ -42,7 +42,15 @@ export default function AdminDashboard() {
   // Modal State: Urus Blok Slot Pentadbiran
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockReason, setBlockReason] = useState('DIBLOK PENTADBIRAN (Agihan Makanan)');
-  const [blockStaff, setBlockStaff] = useState('Ahmad Safwan & Nurul Izzah'); // NAMA PETUGAS
+  const [blockStaff, setBlockStaff] = useState('Ahmad Safwan & Nurul Izzah');
+  const [blockIngQty, setBlockIngQty] = useState<{ [id: string]: number }>({});
+  const [blockCustomIngredients, setBlockCustomIngredients] = useState('');
+  const [autoDeductStock, setAutoDeductStock] = useState(true);
+
+  // Modal State: Rekod Bahan Manual Bagi Mana-mana Tempahan
+  const [editingBookingBahan, setEditingBookingBahan] = useState<any | null>(null);
+  const [editBookingIngQty, setEditBookingIngQty] = useState<{ [id: string]: number }>({});
+  const [editBookingCustomIng, setEditBookingCustomIng] = useState('');
 
   // Form States (Peralatan)
   const [newEquipName, setNewEquipName] = useState('');
@@ -118,29 +126,84 @@ export default function AdminDashboard() {
     router.push('/admin/login');
   };
 
-  // Logik Pintar: Block / Update Slot Masa Pentadbiran
+  // Helper: Pengasingan Maklumat Petugas & Bahan
+  const parseBookingDetails = (b: any) => {
+    const isAdmin = b.matrix_number === 'ADMIN';
+    let petugas = '-';
+    let bahan = b.items_used || 'Belum direkodkan';
+
+    if (isAdmin) {
+      const raw = b.items_used || '';
+      if (raw.includes('||')) {
+        const parts = raw.split('||').map((p: string) => p.trim());
+        parts.forEach((p: string) => {
+          if (p.startsWith('Petugas:')) petugas = p.replace('Petugas:', '').trim();
+          if (p.startsWith('Bahan:')) bahan = p.replace('Bahan:', '').trim();
+        });
+      } else if (raw.startsWith('Petugas:')) {
+        petugas = raw.replace('Petugas:', '').trim();
+        bahan = 'Tiada / Belum direkodkan';
+      } else if (raw.startsWith('Bahan:')) {
+        bahan = raw.replace('Bahan:', '').trim();
+      } else {
+        bahan = raw || 'Kegunaan Pentadbiran';
+      }
+    }
+
+    return {
+      petugas: petugas || '-',
+      bahan: bahan || 'Belum direkodkan'
+    };
+  };
+
+  // Logik Blok & Rekod Bahan Pentadbiran
   const handleBlockSlot = async (slotTime: string) => {
+    // Kumpul senarai bahan yang dipilih Admin
+    const selectedBahanList: string[] = [];
+    const locationIngs = ingredients.filter(i => (i.location || 'Blok 4') === selectedLocation);
+
+    for (const [ingId, qty] of Object.entries(blockIngQty)) {
+      if (qty > 0) {
+        const ingItem = locationIngs.find(i => i.id === ingId);
+        if (ingItem) {
+          selectedBahanList.push(`${ingItem.item_name} (${qty} ${ingItem.unit_label || 'unit'})`);
+          
+          // Potong Stok jika kotak dipilih
+          if (autoDeductStock && ingItem.is_countable) {
+            const newStock = Math.max(0, (ingItem.stock_quantity || 0) - qty);
+            await supabase.from('ingredients').update({
+              stock_quantity: newStock,
+              quantity: newStock > 0 ? 'Ada' : 'Tiada'
+            }).eq('id', ingId);
+          }
+        }
+      }
+    }
+
+    if (blockCustomIngredients.trim()) {
+      selectedBahanList.push(blockCustomIngredients.trim());
+    }
+
+    const bahanString = selectedBahanList.length > 0 ? selectedBahanList.join(', ') : 'Tiada bahan direkod';
+    const formattedItemsUsed = `Petugas: ${blockStaff || '-'} || Bahan: ${bahanString}`;
+
     const existing = bookings.find(b => b.time_slot.slice(0, 5) === slotTime && b.matrix_number === 'ADMIN');
     
     if (existing) {
-      // Kemaskini nama petugas & tujuan jika slot sudah sedia diblok
       const { error } = await supabase.from('bookings').update({
         full_name: blockReason || 'DIBLOK PENTADBIRAN',
-        items_used: blockStaff ? `Petugas: ${blockStaff}` : 'Kegunaan Pentadbiran'
+        items_used: formattedItemsUsed
       }).eq('id', existing.id);
 
-      if (error) {
-        alert('Gagal mengemaskini slot: ' + error.message);
-      }
+      if (error) alert('Gagal mengemaskini slot: ' + error.message);
     } else {
-      // Cipta sekatan baru
       const { error } = await supabase.from('bookings').insert([{
         full_name: blockReason || 'DIBLOK PENTADBIRAN',
         matrix_number: 'ADMIN',
         phone_number: '-',
         room_number: '-',
         pax_count: 1,
-        items_used: blockStaff ? `Petugas: ${blockStaff}` : 'Kegunaan Pentadbiran',
+        items_used: formattedItemsUsed,
         location: selectedLocation,
         booking_date: selectedDate,
         time_slot: slotTime,
@@ -148,9 +211,7 @@ export default function AdminDashboard() {
         status: 'confirmed'
       }]);
 
-      if (error) {
-        alert('Gagal menyekat slot: ' + error.message);
-      }
+      if (error) alert('Gagal menyekat slot: ' + error.message);
     }
 
     fetchAdminData();
@@ -158,11 +219,53 @@ export default function AdminDashboard() {
 
   const handleUnblockSlot = async (bookingId: string) => {
     const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
-    if (error) {
-      alert('Gagal membuka slot: ' + error.message);
-    } else {
-      fetchAdminData();
+    if (error) alert('Gagal membuka slot: ' + error.message);
+    else fetchAdminData();
+  };
+
+  // Simpan Log Bahan Secara Manual Oleh Admin
+  const handleSaveAdminLogBahan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBookingBahan) return;
+
+    const selectedBahanList: string[] = [];
+    const locationIngs = ingredients.filter(i => (i.location || 'Blok 4') === editingBookingBahan.location);
+
+    for (const [ingId, qty] of Object.entries(editBookingIngQty)) {
+      if (qty > 0) {
+        const ingItem = locationIngs.find(i => i.id === ingId);
+        if (ingItem) {
+          selectedBahanList.push(`${ingItem.item_name} (${qty} ${ingItem.unit_label || 'unit'})`);
+          
+          if (ingItem.is_countable) {
+            const newStock = Math.max(0, (ingItem.stock_quantity || 0) - qty);
+            await supabase.from('ingredients').update({
+              stock_quantity: newStock,
+              quantity: newStock > 0 ? 'Ada' : 'Tiada'
+            }).eq('id', ingId);
+          }
+        }
+      }
     }
+
+    if (editBookingCustomIng.trim()) {
+      selectedBahanList.push(editBookingCustomIng.trim());
+    }
+
+    const bahanString = selectedBahanList.length > 0 ? selectedBahanList.join(', ') : 'Tiada bahan direkod';
+    let newItemsUsed = bahanString;
+
+    if (editingBookingBahan.matrix_number === 'ADMIN') {
+      const details = parseBookingDetails(editingBookingBahan);
+      newItemsUsed = `Petugas: ${details.petugas} || Bahan: ${bahanString}`;
+    }
+
+    await supabase.from('bookings').update({ items_used: newItemsUsed }).eq('id', editingBookingBahan.id);
+
+    setEditingBookingBahan(null);
+    setEditBookingIngQty({});
+    setEditBookingCustomIng('');
+    fetchAdminData();
   };
 
   // Status Booking Actions
@@ -305,7 +408,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // FUNKSI EKSPORT CSV
+  // FUNKSI EKSPORT CSV (LAJUR DIPISAHKAN)
   const handleExportCSV = () => {
     if (bookings.length === 0) {
       alert('Tiada data tempahan untuk dieksport.');
@@ -319,7 +422,8 @@ export default function AdminDashboard() {
       'No. Telefon',
       'No. Bilik',
       'Pax',
-      'Bahan Diguna / Petugas Bertugas',
+      'Petugas Bertugas (PIC)',
+      'Bahan Masakan Diguna',
       'Kod Tempahan',
       'Status Tempahan'
     ];
@@ -327,15 +431,7 @@ export default function AdminDashboard() {
     const csvRows = [headers.join(',')];
 
     bookings.forEach(b => {
-      let cleanItems = (b.items_used || 'Belum direkodkan')
-        .replace(/Belum direkodkan,?\s*/gi, '')
-        .replace(/Belum direkod,?\s*/gi, '')
-        .trim();
-
-      if (!cleanItems) {
-        cleanItems = 'Belum direkodkan';
-      }
-
+      const details = parseBookingDetails(b);
       let statusText = b.status === 'confirmed' ? 'DISAHKAN' : b.status === 'cancelled' ? 'DIBATALKAN' : b.status;
       if (b.matrix_number === 'ADMIN') {
         statusText = 'DIBLOK PENTADBIRAN';
@@ -348,7 +444,8 @@ export default function AdminDashboard() {
         `"${b.phone_number}"`,
         `"${b.room_number}"`,
         `"${b.pax_count} pax"`,
-        `"${cleanItems.replace(/"/g, '""')}"`,
+        `"${details.petugas.replace(/"/g, '""')}"`,
+        `"${details.bahan.replace(/"/g, '""')}"`,
         `"${b.cancellation_code}"`,
         `"${statusText}"`
       ];
@@ -369,6 +466,8 @@ export default function AdminDashboard() {
     b.matrix_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (b.cancellation_code && b.cancellation_code.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const filteredLocationIngredients = ingredients.filter(i => (i.location || 'Blok 4') === selectedLocation);
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-8">
@@ -486,10 +585,12 @@ export default function AdminDashboard() {
                   <thead>
                     <tr className="bg-slate-50 border-b text-slate-700 font-black uppercase text-[10px]">
                       <th className="p-3.5">Masa</th>
-                      <th className="p-3.5">Nama & No. Matrik</th>
+                      <th className="p-3.5">Nama / Program</th>
+                      <th className="p-3.5">No. Matrik</th>
                       <th className="p-3.5">Telefon / Bilik</th>
                       <th className="p-3.5">Pax</th>
-                      <th className="p-3.5">Bahan / Petugas</th>
+                      <th className="p-3.5">Petugas Bertugas (PIC)</th>
+                      <th className="p-3.5">Bahan Masakan Digunakan</th>
                       <th className="p-3.5">Kod</th>
                       <th className="p-3.5 text-center">Status</th>
                       <th className="p-3.5 text-center">Tindakan</th>
@@ -498,17 +599,14 @@ export default function AdminDashboard() {
                   <tbody className="divide-y divide-slate-200 font-semibold text-slate-800">
                     {filteredBookings.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
+                        <td colSpan={10} className="p-8 text-center text-slate-400 font-bold">
                           Tiada rekod tempahan dijumpai bagi tarikh & blok ini.
                         </td>
                       </tr>
                     ) : (
                       filteredBookings.map((b) => {
                         const isAdminBlock = b.matrix_number === 'ADMIN';
-                        const displayItems = (b.items_used || 'Belum direkodkan')
-                          .replace(/Belum direkodkan,?\s*/gi, '')
-                          .replace(/Belum direkod,?\s*/gi, '')
-                          .trim() || 'Belum direkodkan';
+                        const details = parseBookingDetails(b);
 
                         return (
                           <tr key={b.id} className={`hover:bg-slate-50 ${isAdminBlock ? 'bg-purple-50/50' : ''}`}>
@@ -517,16 +615,30 @@ export default function AdminDashboard() {
                               <p className={`font-extrabold ${isAdminBlock ? 'text-purple-900' : 'text-slate-900'}`}>
                                 {b.full_name}
                               </p>
-                              <p className="text-[10px] text-slate-500 font-mono">{b.matrix_number}</p>
                             </td>
+                            <td className="p-3.5 font-mono text-[11px] text-slate-600">{b.matrix_number}</td>
                             <td className="p-3.5">
                               <p className="text-slate-900">{b.phone_number}</p>
                               <p className="text-[10px] text-slate-500">Bilik: {b.room_number}</p>
                             </td>
                             <td className="p-3.5 font-bold">{b.pax_count} pax</td>
-                            <td className="p-3.5 max-w-xs text-[11px] text-slate-900 font-semibold">
-                              {displayItems}
+                            
+                            {/* LAJUR PETUGAS BERTUGAS */}
+                            <td className="p-3.5 font-extrabold text-purple-900 max-w-[150px]">
+                              {isAdminBlock ? (
+                                <span className="bg-purple-100 text-purple-900 px-2 py-1 rounded-lg text-[11px] inline-block">
+                                  {details.petugas}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal">-</span>
+                              )}
                             </td>
+
+                            {/* LAJUR BAHAN MASAKAN DIGUNAKAN */}
+                            <td className="p-3.5 max-w-[200px] text-[11px] text-slate-900 font-semibold leading-relaxed">
+                              {details.bahan}
+                            </td>
+
                             <td className="p-3.5 font-mono font-bold text-slate-900 bg-slate-100 rounded text-center">
                               {b.cancellation_code}
                             </td>
@@ -538,7 +650,15 @@ export default function AdminDashboard() {
                                 {isAdminBlock ? 'DIBLOK' : b.status}
                               </span>
                             </td>
-                            <td className="p-3.5 text-center space-x-1">
+                            <td className="p-3.5 text-center space-x-1 whitespace-nowrap">
+                              <button
+                                onClick={() => setEditingBookingBahan(b)}
+                                title="Rekod / Edit Bahan Diguna"
+                                className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 border border-emerald-200"
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" /> Rekod Bahan
+                              </button>
+
                               {isAdminBlock ? (
                                 <button
                                   onClick={() => handleUnblockSlot(b.id)}
@@ -966,14 +1086,14 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* POPUP MODAL: URUS & BLOK SLOT MASA PENTADBIRAN */}
+      {/* POPUP MODAL: URUS, BLOK & REKOD BAHAN PENTADBIRAN */}
       {showBlockModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto border border-slate-200">
             <div className="flex justify-between items-center border-b pb-3">
               <div>
                 <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                  <Lock className="w-5 h-5 text-purple-700" /> Urus Sekatan Slot Masa Pentadbiran
+                  <Lock className="w-5 h-5 text-purple-700" /> Urus Sekatan Slot Masa & Rekod Bahan
                 </h3>
                 <p className="text-xs font-bold text-purple-700">Lokasi: {selectedLocation} | Tarikh: {selectedDate}</p>
               </div>
@@ -1008,7 +1128,64 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <p className="text-xs font-extrabold text-slate-700 pt-1">Klik pada slot masa untuk Sekat (Blok) / Kemaskini atau Buka semula:</p>
+              {/* BAHAGIAN ADMIN REKOD BAHAN DIGUNA */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-extrabold text-slate-900 flex items-center gap-1">
+                    <Carrot className="w-4 h-4 text-emerald-600" /> 3. Bahan Masakan Digunakan Bagi Slot Ini (Pilihan):
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-emerald-800">
+                    <input
+                      type="checkbox"
+                      checked={autoDeductStock}
+                      onChange={(e) => setAutoDeductStock(e.target.checked)}
+                      className="rounded text-emerald-600 w-3.5 h-3.5"
+                    />
+                    <span>Potong Stok Inventori Automatik</span>
+                  </label>
+                </div>
+
+                <div className="max-h-36 overflow-y-auto space-y-1.5 p-2 bg-white border rounded-xl">
+                  {filteredLocationIngredients.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 text-center py-2">Tiada bahan dimasukkan dalam inventori bagi {selectedLocation}.</p>
+                  ) : (
+                    filteredLocationIngredients.map((ing) => (
+                      <div key={ing.id} className="flex items-center justify-between text-xs p-1.5 bg-slate-50 rounded-lg border">
+                        <span className="font-extrabold text-slate-800 text-[11px]">
+                          {ing.item_name} {ing.is_countable && <span className="text-blue-600 font-normal">(Stok: {ing.stock_quantity || 0})</span>}
+                        </span>
+                        {ing.is_countable ? (
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Qty"
+                            value={blockIngQty[ing.id] || ''}
+                            onChange={(e) => setBlockIngQty({ ...blockIngQty, [ing.id]: Number(e.target.value) })}
+                            className="w-14 border p-1 rounded text-xs text-center font-bold text-slate-900 bg-white"
+                          />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={!!blockIngQty[ing.id]}
+                            onChange={(e) => setBlockIngQty({ ...blockIngQty, [ing.id]: e.target.checked ? 1 : 0 })}
+                            className="rounded text-emerald-600 w-4 h-4"
+                          />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Bahan lain / Catatan tambahan (cth: Perencah Khas 2 paket)"
+                  value={blockCustomIngredients}
+                  onChange={(e) => setBlockCustomIngredients(e.target.value)}
+                  className="w-full border border-slate-300 p-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-500 bg-white"
+                />
+              </div>
+
+              <p className="text-xs font-extrabold text-slate-700 pt-1">Klik pada slot masa di bawah untuk Blok / Kemaskini atau Buka semula:</p>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                 {TIME_SLOTS.map((slot) => {
@@ -1023,7 +1200,7 @@ export default function AdminDashboard() {
                           <button
                             onClick={() => handleBlockSlot(slot)}
                             className="p-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-t-xl text-[11px] font-extrabold transition shadow-xs"
-                            title="Klik untuk Kemaskini Nama/Tujuan pada Slot Ini"
+                            title="Klik untuk Kemaskini Petugas/Bahan pada Slot Ini"
                           >
                             <span>{slot}</span>
                             <span className="text-[8px] bg-purple-900 block rounded mt-0.5 py-0.5">Kemaskini</span>
@@ -1070,6 +1247,75 @@ export default function AdminDashboard() {
                 Selesai
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: ADMIN REKOD / EDIT BAHAN UNTUK SEBARANG TEMPAHAN */}
+      {editingBookingBahan && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-emerald-600" /> Rekod Bahan Diguna oleh Admin
+                </h3>
+                <p className="text-xs font-bold text-slate-600">Tempahan: {editingBookingBahan.full_name} ({editingBookingBahan.time_slot})</p>
+              </div>
+              <button onClick={() => setEditingBookingBahan(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveAdminLogBahan} className="space-y-3">
+              <div>
+                <label className="text-xs font-extrabold text-slate-900 mb-1 block">Pilih Bahan Masakan Dapur ({editingBookingBahan.location}):</label>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto border p-2.5 rounded-xl bg-slate-50">
+                  {ingredients.filter(i => (i.location || 'Blok 4') === editingBookingBahan.location).map(ing => (
+                    <div key={ing.id} className="flex items-center justify-between text-xs p-1.5 bg-white rounded-lg border">
+                      <span className="font-bold text-slate-800 text-[11px]">
+                        {ing.item_name} {ing.is_countable && <span className="text-blue-600 font-normal">(Stok: {ing.stock_quantity || 0})</span>}
+                      </span>
+                      {ing.is_countable ? (
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Qty"
+                          value={editBookingIngQty[ing.id] || ''}
+                          onChange={(e) => setEditBookingIngQty({ ...editBookingIngQty, [ing.id]: Number(e.target.value) })}
+                          className="w-14 border p-1 rounded text-xs text-center font-bold text-slate-900 bg-slate-50"
+                        />
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={!!editBookingIngQty[ing.id]}
+                          onChange={(e) => setEditBookingIngQty({ ...editBookingIngQty, [ing.id]: e.target.checked ? 1 : 0 })}
+                          className="rounded text-emerald-600 w-4 h-4"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-900 mb-1 block">Bahan Lain / Catatan Tambahan:</label>
+                <input
+                  type="text"
+                  placeholder="cth: Kicap Manis, Garam"
+                  value={editBookingCustomIng}
+                  onChange={(e) => setEditBookingCustomIng(e.target.value)}
+                  className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 bg-white"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setEditingBookingBahan(null)} className="flex-1 bg-slate-200 text-slate-800 font-bold py-2.5 rounded-xl text-xs">
+                  Batal
+                </button>
+                <button type="submit" className="flex-1 bg-emerald-600 text-white font-extrabold py-2.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-md">
+                  Simpan & Potong Stok
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

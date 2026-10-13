@@ -38,7 +38,7 @@ export default function Home() {
   const [showRulesModal, setShowRulesModal] = useState(true);
 
   // Pop-up Info Slot Diblok Pentadbiran
-  const [blockedSlotInfo, setBlockedSlotInfo] = useState<{ time: string; reason: string; staff: string } | null>(null);
+  const [blockedSlotInfo, setBlockedSlotInfo] = useState<{ time: string; reason: string; staff: string; ingredients: string } | null>(null);
 
   // Search & Multiple Noticeboard State
   const [activeNotices, setActiveNotices] = useState<string[]>([]);
@@ -292,10 +292,27 @@ export default function Home() {
     } else if (status === 'BOOKED') {
       const adminBooking = bookedSlots.find(b => b.time_slot === slotTime && b.matrix_number === 'ADMIN');
       if (adminBooking) {
+        let petugas = '-';
+        let bahan = 'Tiada bahan direkod';
+        const raw = adminBooking.items_used || '';
+
+        if (raw.includes('||')) {
+          const parts = raw.split('||').map((p: string) => p.trim());
+          parts.forEach((p: string) => {
+            if (p.startsWith('Petugas:')) petugas = p.replace('Petugas:', '').trim();
+            if (p.startsWith('Bahan:')) bahan = p.replace('Bahan:', '').trim();
+          });
+        } else if (raw.startsWith('Petugas:')) {
+          petugas = raw.replace('Petugas:', '').trim();
+        } else {
+          bahan = raw || 'Kegunaan Pentadbiran';
+        }
+
         setBlockedSlotInfo({
           time: slotTime,
           reason: adminBooking.full_name,
-          staff: adminBooking.items_used || 'Tiada maklumat'
+          staff: petugas,
+          ingredients: bahan
         });
       }
     }
@@ -571,6 +588,14 @@ export default function Home() {
                 </span>
                 <p className="font-extrabold text-slate-900 bg-white p-2 rounded-xl border border-purple-200 mt-0.5">
                   {blockedSlotInfo.staff}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase text-purple-900 flex items-center gap-1 mt-1">
+                  <Carrot className="w-3.5 h-3.5 text-emerald-700" /> Bahan Digunakan:
+                </span>
+                <p className="font-extrabold text-slate-900 bg-white p-2 rounded-xl border border-purple-200 mt-0.5">
+                  {blockedSlotInfo.ingredients}
                 </p>
               </div>
             </div>
