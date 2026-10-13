@@ -518,9 +518,10 @@ export default function Home() {
           </div>
         </div>
 
-        {/* FOOTER HAK CIPTA RASMI */}
+        {/* FOOTER HAK CIPTA RASMI & PEREKA */}
         <footer className="mt-12 text-center text-xs text-slate-600 font-bold pb-6 border-t border-slate-200 pt-6 no-print">
           <p>© 2026 Sistem Tempahan Dapur Siswa Madani. Hak Cipta Terpelihara Kolej Harun Aminurrashid (KHAR), UPSI.</p>
+          <p className="text-[11px] text-slate-500 font-semibold mt-1">Designed by: Astranova</p>
         </footer>
 
       </div>
