@@ -118,27 +118,42 @@ export default function AdminDashboard() {
     router.push('/admin/login');
   };
 
-  // Block / Unblock Actions oleh Admin
+  // Logik Pintar: Block / Update Slot Masa Pentadbiran
   const handleBlockSlot = async (slotTime: string) => {
-    const { error } = await supabase.from('bookings').insert([{
-      full_name: blockReason || 'DIBLOK PENTADBIRAN',
-      matrix_number: 'ADMIN',
-      phone_number: '-',
-      room_number: '-',
-      pax_count: 1,
-      items_used: blockStaff ? `Petugas: ${blockStaff}` : 'Kegunaan Pentadbiran',
-      location: selectedLocation,
-      booking_date: selectedDate,
-      time_slot: slotTime,
-      cancellation_code: 'ADMIN',
-      status: 'confirmed'
-    }]);
+    const existing = bookings.find(b => b.time_slot.slice(0, 5) === slotTime && b.matrix_number === 'ADMIN');
+    
+    if (existing) {
+      // Kemaskini nama petugas & tujuan jika slot sudah sedia diblok
+      const { error } = await supabase.from('bookings').update({
+        full_name: blockReason || 'DIBLOK PENTADBIRAN',
+        items_used: blockStaff ? `Petugas: ${blockStaff}` : 'Kegunaan Pentadbiran'
+      }).eq('id', existing.id);
 
-    if (error) {
-      alert('Gagal menyekat slot: ' + error.message);
+      if (error) {
+        alert('Gagal mengemaskini slot: ' + error.message);
+      }
     } else {
-      fetchAdminData();
+      // Cipta sekatan baru
+      const { error } = await supabase.from('bookings').insert([{
+        full_name: blockReason || 'DIBLOK PENTADBIRAN',
+        matrix_number: 'ADMIN',
+        phone_number: '-',
+        room_number: '-',
+        pax_count: 1,
+        items_used: blockStaff ? `Petugas: ${blockStaff}` : 'Kegunaan Pentadbiran',
+        location: selectedLocation,
+        booking_date: selectedDate,
+        time_slot: slotTime,
+        cancellation_code: 'ADMIN',
+        status: 'confirmed'
+      }]);
+
+      if (error) {
+        alert('Gagal menyekat slot: ' + error.message);
+      }
     }
+
+    fetchAdminData();
   };
 
   const handleUnblockSlot = async (bookingId: string) => {
@@ -290,7 +305,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // FUNKSI EKSPORT CSV TERKEMAS
+  // FUNKSI EKSPORT CSV
   const handleExportCSV = () => {
     if (bookings.length === 0) {
       alert('Tiada data tempahan untuk dieksport.');
@@ -993,7 +1008,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <p className="text-xs font-extrabold text-slate-700 pt-1">Klik pada slot masa untuk Sekat (Blok) atau Buka semula:</p>
+              <p className="text-xs font-extrabold text-slate-700 pt-1">Klik pada slot masa untuk Sekat (Blok) / Kemaskini atau Buka semula:</p>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                 {TIME_SLOTS.map((slot) => {
@@ -1004,16 +1019,23 @@ export default function AdminDashboard() {
                   return (
                     <div key={slot} className="flex flex-col gap-1">
                       {isBlockedByAdmin ? (
-                        <button
-                          onClick={() => handleUnblockSlot(existingBooking.id)}
-                          className="p-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold flex flex-col items-center justify-center transition shadow-xs"
-                          title="Klik untuk Buka Slot"
-                        >
-                          <span>{slot}</span>
-                          <span className="text-[9px] bg-purple-900 px-1 py-0.5 rounded mt-0.5 flex items-center gap-0.5">
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => handleBlockSlot(slot)}
+                            className="p-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-t-xl text-[11px] font-extrabold transition shadow-xs"
+                            title="Klik untuk Kemaskini Nama/Tujuan pada Slot Ini"
+                          >
+                            <span>{slot}</span>
+                            <span className="text-[8px] bg-purple-900 block rounded mt-0.5 py-0.5">Kemaskini</span>
+                          </button>
+                          <button
+                            onClick={() => handleUnblockSlot(existingBooking.id)}
+                            className="p-1 bg-purple-100 text-purple-900 hover:bg-purple-200 rounded-b-xl text-[9px] font-bold flex items-center justify-center gap-0.5"
+                            title="Klik untuk Buka Semula Slot"
+                          >
                             <Unlock className="w-2.5 h-2.5" /> Buka
-                          </span>
-                        </button>
+                          </button>
+                        </div>
                       ) : isBookedByStudent ? (
                         <div
                           className="p-2 bg-rose-100 border border-rose-300 text-rose-800 rounded-xl text-xs font-extrabold flex flex-col items-center justify-center opacity-80"
