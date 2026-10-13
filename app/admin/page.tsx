@@ -7,7 +7,7 @@ import { TIME_SLOTS } from '@/lib/utils';
 import {
   Calendar, Clock, CheckCircle, XCircle, Trash2, LogOut, Search,
   FileSpreadsheet, Plus, Utensils, Carrot, Megaphone,
-  PhoneCall, Pencil, X, Lock, Unlock, UserCheck, ShoppingBag
+  PhoneCall, Pencil, X, Lock, Unlock, UserCheck, ShoppingBag, User
 } from 'lucide-react';
 
 const INGREDIENT_CATEGORIES = [
@@ -39,13 +39,17 @@ export default function AdminDashboard() {
   const [notices, setNotices] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'bookings' | 'equipment' | 'ingredients' | 'notices' | 'contacts'>('bookings');
 
-  // Modal State: Urus Blok Slot Pentadbiran (DIKOSONGKAN NILAI AWAL)
+  // Modal State: Urus Blok Slot Pentadbiran
   const [showBlockModal, setShowBlockModal] = useState(false);
-  const [blockReason, setBlockReason] = useState(''); // Kosong
-  const [blockStaff, setBlockStaff] = useState('');   // Kosong
+  const [blockReason, setBlockReason] = useState('');
+  const [blockStaff, setBlockStaff] = useState('');
   const [blockIngQty, setBlockIngQty] = useState<{ [id: string]: number }>({});
   const [blockCustomIngredients, setBlockCustomIngredients] = useState('');
   const [autoDeductStock, setAutoDeductStock] = useState(true);
+
+  // Modal State: Edit Quick PIC Petugas
+  const [editingStaffBooking, setEditingStaffBooking] = useState<any | null>(null);
+  const [quickStaffName, setQuickStaffName] = useState('');
 
   // Modal State: Rekod Bahan Manual Bagi Mana-mana Tempahan
   const [editingBookingBahan, setEditingBookingBahan] = useState<any | null>(null);
@@ -137,14 +141,22 @@ export default function AdminDashboard() {
       if (raw.includes('||')) {
         const parts = raw.split('||').map((p: string) => p.trim());
         parts.forEach((p: string) => {
-          if (p.startsWith('Petugas:')) petugas = p.replace('Petugas:', '').trim();
-          if (p.startsWith('Bahan:')) bahan = p.replace('Bahan:', '').trim();
+          if (p.startsWith('Petugas:')) {
+            const val = p.replace('Petugas:', '').trim();
+            if (val && val !== '-') petugas = val;
+          }
+          if (p.startsWith('Bahan:')) {
+            const val = p.replace('Bahan:', '').trim();
+            if (val) bahan = val;
+          }
         });
       } else if (raw.startsWith('Petugas:')) {
-        petugas = raw.replace('Petugas:', '').trim();
-        bahan = 'Tiada / Belum direkodkan';
+        const val = raw.replace('Petugas:', '').trim();
+        if (val && val !== '-') petugas = val;
+        bahan = 'Tiada bahan direkod';
       } else if (raw.startsWith('Bahan:')) {
-        bahan = raw.replace('Bahan:', '').trim();
+        const val = raw.replace('Bahan:', '').trim();
+        if (val) bahan = val;
       } else {
         bahan = raw || 'Kegunaan Pentadbiran';
       }
@@ -156,8 +168,28 @@ export default function AdminDashboard() {
     };
   };
 
+  // Buka Modal & Auto-Fill Maklumat Petugas Sedia Ada
+  const handleOpenBlockModal = () => {
+    const existingAdminBooking = bookings.find(b => b.matrix_number === 'ADMIN');
+    if (existingAdminBooking) {
+      const details = parseBookingDetails(existingAdminBooking);
+      setBlockReason(existingAdminBooking.full_name || '');
+      setBlockStaff(details.petugas !== '-' ? details.petugas : '');
+    } else {
+      setBlockReason('');
+      setBlockStaff('');
+    }
+    setShowBlockModal(true);
+  };
+
   // Logik Blok & Rekod Bahan Pentadbiran
   const handleBlockSlot = async (slotTime: string) => {
+    if (!blockStaff.trim()) {
+      if (!confirm('Nama Petugas masih kosong. Adakah anda pasti mahu menyekat slot tanpa nama petugas?')) {
+        return;
+      }
+    }
+
     const selectedBahanList: string[] = [];
     const locationIngs = ingredients.filter(i => (i.location || 'Blok 4') === selectedLocation);
 
@@ -183,7 +215,8 @@ export default function AdminDashboard() {
     }
 
     const bahanString = selectedBahanList.length > 0 ? selectedBahanList.join(', ') : 'Tiada bahan direkod';
-    const formattedItemsUsed = `Petugas: ${blockStaff.trim() || '-'} || Bahan: ${bahanString}`;
+    const staffName = blockStaff.trim() || '-';
+    const formattedItemsUsed = `Petugas: ${staffName} || Bahan: ${bahanString}`;
 
     const existing = bookings.find(b => b.time_slot.slice(0, 5) === slotTime && b.matrix_number === 'ADMIN');
     
@@ -212,6 +245,51 @@ export default function AdminDashboard() {
       if (error) alert('Gagal menyekat slot: ' + error.message);
     }
 
+    fetchAdminData();
+  };
+
+  // Kemaskini Nama Petugas Untuk SEMUA Slot Diblok Pada Tarikh Ini (Serentak)
+  const handleUpdateAllBlockedSlots = async () => {
+    const adminBookings = bookings.filter(b => b.matrix_number === 'ADMIN');
+    if (adminBookings.length === 0) {
+      alert('Tiada slot diblok untuk dikemaskini pada tarikh ini.');
+      return;
+    }
+
+    if (!blockStaff.trim()) {
+      alert('Sila taipkan Nama Petugas Bertugas (PIC) terlebih dahulu.');
+      return;
+    }
+
+    const staffName = blockStaff.trim();
+    const reasonName = blockReason.trim() || 'DIBLOK PENTADBIRAN';
+
+    for (const b of adminBookings) {
+      const details = parseBookingDetails(b);
+      const newItemsUsed = `Petugas: ${staffName} || Bahan: ${details.bahan}`;
+      await supabase.from('bookings').update({
+        full_name: reasonName,
+        items_used: newItemsUsed
+      }).eq('id', b.id);
+    }
+
+    alert('Nama petugas telah berjaya dikemaskini untuk semua slot diblok!');
+    fetchAdminData();
+  };
+
+  // Kemaskini Cepat Petugas Dari Jadual
+  const handleSaveQuickStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaffBooking) return;
+
+    const details = parseBookingDetails(editingStaffBooking);
+    const newStaff = quickStaffName.trim() || '-';
+    const newItemsUsed = `Petugas: ${newStaff} || Bahan: ${details.bahan}`;
+
+    await supabase.from('bookings').update({ items_used: newItemsUsed }).eq('id', editingStaffBooking.id);
+
+    setEditingStaffBooking(null);
+    setQuickStaffName('');
     fetchAdminData();
   };
 
@@ -406,7 +484,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // FUNKSI EKSPORT CSV (LAJUR DIPISAHKAN)
+  // FUNKSI EKSPORT CSV
   const handleExportCSV = () => {
     if (bookings.length === 0) {
       alert('Tiada data tempahan untuk dieksport.');
@@ -545,7 +623,7 @@ export default function AdminDashboard() {
 
               <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 <button
-                  onClick={() => setShowBlockModal(true)}
+                  onClick={handleOpenBlockModal}
                   className="bg-purple-700 hover:bg-purple-800 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition"
                 >
                   <Lock className="w-4 h-4" /> Urus & Blok Slot Masa Pentadbiran
@@ -622,11 +700,23 @@ export default function AdminDashboard() {
                             <td className="p-3.5 font-bold">{b.pax_count} pax</td>
                             
                             {/* LAJUR PETUGAS BERTUGAS */}
-                            <td className="p-3.5 font-extrabold text-purple-900 max-w-[150px]">
+                            <td className="p-3.5 font-extrabold text-purple-900 max-w-[160px]">
                               {isAdminBlock ? (
-                                <span className="bg-purple-100 text-purple-900 px-2 py-1 rounded-lg text-[11px] inline-block">
-                                  {details.petugas}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  <span className="bg-purple-100 text-purple-900 px-2 py-1 rounded-lg text-[11px] inline-block font-extrabold">
+                                    {details.petugas}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      setEditingStaffBooking(b);
+                                      setQuickStaffName(details.petugas !== '-' ? details.petugas : '');
+                                    }}
+                                    title="Edit Nama Petugas Sahaja"
+                                    className="p-1 text-purple-700 hover:bg-purple-200 rounded-md transition shrink-0"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="text-slate-400 font-normal">-</span>
                               )}
@@ -1106,7 +1196,7 @@ export default function AdminDashboard() {
                     type="text"
                     value={blockReason}
                     onChange={(e) => setBlockReason(e.target.value)}
-                    placeholder="cth: DIBLOK PENTADBIRAN (Agihan Makanan)"
+                    placeholder="cth: MMK (Agihan Makanan)"
                     className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 mt-1 bg-slate-50 focus:bg-white"
                   />
                 </div>
@@ -1122,6 +1212,17 @@ export default function AdminDashboard() {
                     className="w-full border border-purple-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 mt-1 bg-purple-50 focus:bg-white"
                   />
                 </div>
+              </div>
+
+              {/* BUTANG KEMASKINI SERENTAK UNTUK SEMUA SLOT DIBLOK */}
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={handleUpdateAllBlockedSlots}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-xs"
+                >
+                  <UserCheck className="w-4 h-4" /> Kemaskini Petugas Bagi Semua Slot Diblok
+                </button>
               </div>
 
               {/* BAHAGIAN ADMIN REKOD BAHAN DIGUNA */}
@@ -1247,6 +1348,44 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* POPUP MODAL: EDIT PIC PETUGAS CEPAT */}
+      {editingStaffBooking && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl space-y-4 border border-slate-200">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-purple-700" /> Edit Nama Petugas (PIC)
+              </h3>
+              <button onClick={() => setEditingStaffBooking(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+            </div>
+
+            <form onSubmit={handleSaveQuickStaff} className="space-y-3">
+              <div>
+                <p className="text-[11px] font-bold text-slate-600">Slot: <span className="text-purple-900">{editingStaffBooking.time_slot} ({editingStaffBooking.full_name})</span></p>
+                <label className="text-xs font-extrabold text-slate-900 mt-2 block">Nama Petugas Bertugas (PIC):</label>
+                <input
+                  type="text"
+                  required
+                  value={quickStaffName}
+                  onChange={(e) => setQuickStaffName(e.target.value)}
+                  placeholder="cth: Ahmad Safwan & Nurul Izzah"
+                  className="w-full border border-purple-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 mt-1 bg-purple-50 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setEditingStaffBooking(null)} className="flex-1 bg-slate-200 text-slate-800 font-bold py-2 rounded-xl text-xs">
+                  Batal
+                </button>
+                <button type="submit" className="flex-1 bg-purple-700 text-white font-extrabold py-2 rounded-xl text-xs hover:bg-purple-800 transition shadow-md">
+                  Simpan PIC
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* POPUP MODAL: ADMIN REKOD / EDIT BAHAN UNTUK SEBARANG TEMPAHAN */}
       {editingBookingBahan && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -1307,7 +1446,7 @@ export default function AdminDashboard() {
                 <button type="button" onClick={() => setEditingBookingBahan(null)} className="flex-1 bg-slate-200 text-slate-800 font-bold py-2.5 rounded-xl text-xs">
                   Batal
                 </button>
-                <button type="submit" className="flex-1 bg-emerald-600 text-white font-extrabold py-2.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-md">
+                <button type="submit" className="flex-1 bg-[#00A354] text-white font-extrabold py-2.5 rounded-xl text-xs hover:bg-emerald-700 transition shadow-md">
                   Simpan & Potong Stok
                 </button>
               </div>
