@@ -532,7 +532,7 @@ export default function Home() {
           </h3>
           
           <p className="text-xs text-slate-600 font-medium">
-            Sila hubungi nombor berikut jika memerlukan bantuan peralatan, masalah kebersihan, tong gas habis, atau sebarang isu di dapur:
+            Sila hubungi nombor berikut jika memerlukan bantuan peralatan, masalah kebersihan atau sebarang isu di dapur:
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
