@@ -7,7 +7,7 @@ import { TIME_SLOTS } from '@/lib/utils';
 import {
   Calendar, Clock, CheckCircle, XCircle, Trash2, LogOut, Search,
   FileSpreadsheet, Plus, Utensils, Carrot, Megaphone,
-  PhoneCall, Pencil, X, Lock, Unlock
+  PhoneCall, Pencil, X, Lock, Unlock, UserCheck
 } from 'lucide-react';
 
 const INGREDIENT_CATEGORIES = [
@@ -42,6 +42,7 @@ export default function AdminDashboard() {
   // Modal State: Urus Blok Slot Pentadbiran
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockReason, setBlockReason] = useState('DIBLOK PENTADBIRAN (Agihan Makanan)');
+  const [blockStaff, setBlockStaff] = useState('Ahmad Safwan & Nurul Izzah'); // NAMA PETUGAS
 
   // Form States (Peralatan)
   const [newEquipName, setNewEquipName] = useState('');
@@ -125,7 +126,7 @@ export default function AdminDashboard() {
       phone_number: '-',
       room_number: '-',
       pax_count: 1,
-      items_used: 'Kegunaan Pentadbiran / Agihan Makanan',
+      items_used: blockStaff ? `Petugas: ${blockStaff}` : 'Kegunaan Pentadbiran',
       location: selectedLocation,
       booking_date: selectedDate,
       time_slot: slotTime,
@@ -289,7 +290,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // FUNKSI EKSPORT CSV TERKEMAS (SERASIKAN DENGAN EXCEL)
+  // FUNKSI EKSPORT CSV TERKEMAS
   const handleExportCSV = () => {
     if (bookings.length === 0) {
       alert('Tiada data tempahan untuk dieksport.');
@@ -298,12 +299,12 @@ export default function AdminDashboard() {
 
     const headers = [
       'Masa Slot',
-      'Nama Pengguna',
+      'Nama Pengguna / Program',
       'No. Matrik',
       'No. Telefon',
       'No. Bilik',
       'Pax',
-      'Bahan Masakan Digunakan',
+      'Bahan Diguna / Petugas Bertugas',
       'Kod Tempahan',
       'Status Tempahan'
     ];
@@ -473,7 +474,7 @@ export default function AdminDashboard() {
                       <th className="p-3.5">Nama & No. Matrik</th>
                       <th className="p-3.5">Telefon / Bilik</th>
                       <th className="p-3.5">Pax</th>
-                      <th className="p-3.5">Bahan Diguna</th>
+                      <th className="p-3.5">Bahan / Petugas</th>
                       <th className="p-3.5">Kod</th>
                       <th className="p-3.5 text-center">Status</th>
                       <th className="p-3.5 text-center">Tindakan</th>
@@ -965,16 +966,31 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-3">
-              <div>
-                <label className="text-xs font-extrabold text-slate-900">Tujuan Sekatan / Program</label>
-                <input
-                  type="text"
-                  required
-                  value={blockReason}
-                  onChange={(e) => setBlockReason(e.target.value)}
-                  placeholder="cth: Program Agihan Makanan / Penyelenggaraan"
-                  className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 mt-1 bg-slate-50"
-                />
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-extrabold text-slate-900">1. Tujuan Sekatan / Program</label>
+                  <input
+                    type="text"
+                    required
+                    value={blockReason}
+                    onChange={(e) => setBlockReason(e.target.value)}
+                    placeholder="cth: Agihan Makanan / Pembersihan"
+                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 mt-1 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold text-purple-900 flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5 text-purple-700" /> 2. Nama Petugas Bertugas (PIC)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={blockStaff}
+                    onChange={(e) => setBlockStaff(e.target.value)}
+                    placeholder="cth: Ahmad Safwan & Nurul Izzah"
+                    className="w-full border border-purple-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 mt-1 bg-purple-50"
+                  />
+                </div>
               </div>
 
               <p className="text-xs font-extrabold text-slate-700 pt-1">Klik pada slot masa untuk Sekat (Blok) atau Buka semula:</p>

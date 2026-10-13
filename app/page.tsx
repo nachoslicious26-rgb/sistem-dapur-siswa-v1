@@ -6,12 +6,14 @@ import { TIME_SLOTS, getSlotStatus } from '@/lib/utils';
 import {
   Calendar, Clock, CheckCircle, AlertCircle, X, Utensils, Carrot, Printer,
   RefreshCw, PhoneCall, Search, Megaphone, ShoppingBag, KeyRound, Phone,
-  ChevronLeft, ChevronRight, BookOpen, ShieldCheck
+  ChevronLeft, ChevronRight, BookOpen, ShieldCheck, Lock, UserCheck
 } from 'lucide-react';
 
 interface BookedSlotInfo {
   time_slot: string;
   full_name: string;
+  matrix_number: string;
+  items_used: string;
 }
 
 const INGREDIENT_CATEGORIES = [
@@ -34,6 +36,9 @@ export default function Home() {
 
   // Pop-up Tatacara Penggunaan Dapur (Awal Masuk)
   const [showRulesModal, setShowRulesModal] = useState(true);
+
+  // Pop-up Info Slot Diblok Pentadbiran
+  const [blockedSlotInfo, setBlockedSlotInfo] = useState<{ time: string; reason: string; staff: string } | null>(null);
 
   // Search & Multiple Noticeboard State
   const [activeNotices, setActiveNotices] = useState<string[]>([]);
@@ -106,7 +111,7 @@ export default function Home() {
     // Fetch Tempahan
     const { data: bookingData } = await supabase
       .from('bookings')
-      .select('time_slot, full_name')
+      .select('time_slot, full_name, matrix_number, items_used')
       .eq('location', location)
       .eq('booking_date', selectedDate)
       .eq('status', 'confirmed');
@@ -115,7 +120,9 @@ export default function Home() {
       setBookedSlots(
         bookingData.map(b => ({
           time_slot: b.time_slot.slice(0, 5),
-          full_name: b.full_name
+          full_name: b.full_name,
+          matrix_number: b.matrix_number,
+          items_used: b.items_used
         }))
       );
     }
@@ -139,7 +146,7 @@ export default function Home() {
     setCurrentNoticeIndex(0);
   }, [activeNotices.length]);
 
-  // AUTO ROTATE NOTICEBOARD SETIAP 10 SAAT (10000ms)
+  // AUTO ROTATE NOTICEBOARD SETIAP 10 SAAT
   useEffect(() => {
     if (activeNotices.length <= 1) return;
 
@@ -279,6 +286,21 @@ export default function Home() {
     i.item_name.toLowerCase().includes(ingSearch.toLowerCase())
   );
 
+  const handleSlotClick = (slotTime: string, status: string) => {
+    if (status === 'AVAILABLE') {
+      setSelectedSlot(slotTime);
+    } else if (status === 'BOOKED') {
+      const adminBooking = bookedSlots.find(b => b.time_slot === slotTime && b.matrix_number === 'ADMIN');
+      if (adminBooking) {
+        setBlockedSlotInfo({
+          time: slotTime,
+          reason: adminBooking.full_name,
+          staff: adminBooking.items_used || 'Tiada maklumat'
+        });
+      }
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-8">
       
@@ -295,7 +317,7 @@ export default function Home() {
 
       <div className="max-w-5xl mx-auto space-y-6 no-print-area">
         
-        {/* BANNER NOTICEBOARD (AUTOROTATE 10 SAAT TANPA PAPARAN DURASI) */}
+        {/* BANNER NOTICEBOARD */}
         {activeNotices.length > 0 && (
           <div className="bg-amber-500 text-slate-950 p-4 rounded-2xl shadow-md border-2 border-amber-600 flex items-center justify-between gap-3 transition-all duration-500">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -317,20 +339,17 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Navigasi Manual Pengumuman */}
             {activeNotices.length > 1 && (
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => setCurrentNoticeIndex((prev) => (prev - 1 + activeNotices.length) % activeNotices.length)}
                   className="p-1.5 bg-amber-600 hover:bg-amber-700 text-slate-950 rounded-lg transition"
-                  title="Pengumuman Sebelum"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setCurrentNoticeIndex((prev) => (prev + 1) % activeNotices.length)}
                   className="p-1.5 bg-amber-600 hover:bg-amber-700 text-slate-950 rounded-lg transition"
-                  title="Pengumuman Seterusnya"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -406,12 +425,15 @@ export default function Home() {
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-7 gap-2">
             {TIME_SLOTS.map((slot) => {
               const status = getSlotStatus(selectedDate, slot, bookedSlotTimes, now);
+              const isAdminBlock = bookedSlots.some(b => b.time_slot === slot && b.matrix_number === 'ADMIN');
+
               return (
                 <button
                   key={slot}
-                  onClick={() => { if (status === 'AVAILABLE') setSelectedSlot(slot); }}
+                  onClick={() => handleSlotClick(slot, status)}
                   className={`p-2.5 rounded-xl text-xs font-black flex flex-col items-center justify-center border transition ${
                     status === 'PAST' ? 'bg-slate-200 text-slate-600 cursor-not-allowed border-slate-300' :
+                    isAdminBlock ? 'bg-purple-700 text-white cursor-pointer hover:brightness-110 border-purple-900' :
                     status === 'BOOKED' ? 'bg-[#FF2900] text-white cursor-not-allowed border-rose-700' :
                     selectedSlot === slot ? 'bg-blue-600 text-white ring-4 ring-blue-200 scale-105 border-blue-700' :
                     'bg-[#00A354] text-white cursor-pointer hover:brightness-95 border-emerald-700'
@@ -419,7 +441,7 @@ export default function Home() {
                 >
                   <span className="text-xs font-extrabold">{slot}</span>
                   <span className="text-[9px] font-bold mt-0.5 px-1 rounded bg-black/20">
-                    {status === 'PAST' ? 'Lepas' : status === 'BOOKED' ? 'Penuh' : 'Boleh'}
+                    {status === 'PAST' ? 'Lepas' : isAdminBlock ? 'Diblok' : status === 'BOOKED' ? 'Penuh' : 'Boleh'}
                   </span>
                 </button>
               );
@@ -526,7 +548,44 @@ export default function Home() {
 
       </div>
 
-      {/* POPUP MODAL: TATACARA PENGGUNAAN DAPUR (SAAT PERTAMA MASUK) */}
+      {/* POPUP MODAL: INFO SLOT DIBLOK PENTADBIRAN */}
+      {blockedSlotInfo && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 border border-purple-200 text-center">
+            <div className="w-12 h-12 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center mx-auto">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-black text-slate-900 text-base">Slot Masa Diblok Pentadbiran</h3>
+              <p className="text-xs font-bold text-purple-700">Waktu: {blockedSlotInfo.time}</p>
+            </div>
+
+            <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-200 text-left space-y-2 text-xs">
+              <div>
+                <span className="text-[10px] font-black uppercase text-purple-900 block">Tujuan Sekatan:</span>
+                <p className="font-extrabold text-slate-900">{blockedSlotInfo.reason}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase text-purple-900 flex items-center gap-1 mt-1">
+                  <UserCheck className="w-3.5 h-3.5 text-purple-700" /> Petugas Bertugas (PIC):
+                </span>
+                <p className="font-extrabold text-slate-900 bg-white p-2 rounded-xl border border-purple-200 mt-0.5">
+                  {blockedSlotInfo.staff}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setBlockedSlotInfo(null)}
+              className="w-full bg-slate-900 text-white font-extrabold py-2.5 rounded-xl text-xs hover:bg-slate-800 transition"
+            >
+              Faham
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: TATACARA PENGGUNAAN DAPUR */}
       {showRulesModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white w-full max-w-lg rounded-3xl p-6 md:p-8 shadow-2xl space-y-5 border border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -711,7 +770,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* AYAT PERSETUJUAN KEMASKINI: MEMATIKAN SUIS */}
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
                 <label className="flex items-start gap-2 cursor-pointer text-xs font-bold text-amber-950">
                   <input type="checkbox" required checked={agreedRules} onChange={(e) => setAgreedRules(e.target.checked)} className="mt-0.5 rounded text-amber-600 w-4 h-4" />
