@@ -39,10 +39,10 @@ export default function AdminDashboard() {
   const [notices, setNotices] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'bookings' | 'equipment' | 'ingredients' | 'notices' | 'contacts'>('bookings');
 
-  // Modal State: Urus Blok Slot Pentadbiran
+  // Modal State: Urus Blok Slot Pentadbiran (DIKOSONGKAN NILAI AWAL)
   const [showBlockModal, setShowBlockModal] = useState(false);
-  const [blockReason, setBlockReason] = useState('DIBLOK PENTADBIRAN (Agihan Makanan)');
-  const [blockStaff, setBlockStaff] = useState('Ahmad Safwan & Nurul Izzah');
+  const [blockReason, setBlockReason] = useState(''); // Kosong
+  const [blockStaff, setBlockStaff] = useState('');   // Kosong
   const [blockIngQty, setBlockIngQty] = useState<{ [id: string]: number }>({});
   const [blockCustomIngredients, setBlockCustomIngredients] = useState('');
   const [autoDeductStock, setAutoDeductStock] = useState(true);
@@ -158,7 +158,6 @@ export default function AdminDashboard() {
 
   // Logik Blok & Rekod Bahan Pentadbiran
   const handleBlockSlot = async (slotTime: string) => {
-    // Kumpul senarai bahan yang dipilih Admin
     const selectedBahanList: string[] = [];
     const locationIngs = ingredients.filter(i => (i.location || 'Blok 4') === selectedLocation);
 
@@ -168,7 +167,6 @@ export default function AdminDashboard() {
         if (ingItem) {
           selectedBahanList.push(`${ingItem.item_name} (${qty} ${ingItem.unit_label || 'unit'})`);
           
-          // Potong Stok jika kotak dipilih
           if (autoDeductStock && ingItem.is_countable) {
             const newStock = Math.max(0, (ingItem.stock_quantity || 0) - qty);
             await supabase.from('ingredients').update({
@@ -185,20 +183,20 @@ export default function AdminDashboard() {
     }
 
     const bahanString = selectedBahanList.length > 0 ? selectedBahanList.join(', ') : 'Tiada bahan direkod';
-    const formattedItemsUsed = `Petugas: ${blockStaff || '-'} || Bahan: ${bahanString}`;
+    const formattedItemsUsed = `Petugas: ${blockStaff.trim() || '-'} || Bahan: ${bahanString}`;
 
     const existing = bookings.find(b => b.time_slot.slice(0, 5) === slotTime && b.matrix_number === 'ADMIN');
     
     if (existing) {
       const { error } = await supabase.from('bookings').update({
-        full_name: blockReason || 'DIBLOK PENTADBIRAN',
+        full_name: blockReason.trim() || 'DIBLOK PENTADBIRAN',
         items_used: formattedItemsUsed
       }).eq('id', existing.id);
 
       if (error) alert('Gagal mengemaskini slot: ' + error.message);
     } else {
       const { error } = await supabase.from('bookings').insert([{
-        full_name: blockReason || 'DIBLOK PENTADBIRAN',
+        full_name: blockReason.trim() || 'DIBLOK PENTADBIRAN',
         matrix_number: 'ADMIN',
         phone_number: '-',
         room_number: '-',
@@ -1106,11 +1104,10 @@ export default function AdminDashboard() {
                   <label className="text-xs font-extrabold text-slate-900">1. Tujuan Sekatan / Program</label>
                   <input
                     type="text"
-                    required
                     value={blockReason}
                     onChange={(e) => setBlockReason(e.target.value)}
-                    placeholder="cth: Agihan Makanan / Pembersihan"
-                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 mt-1 bg-slate-50"
+                    placeholder="cth: DIBLOK PENTADBIRAN (Agihan Makanan)"
+                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 mt-1 bg-slate-50 focus:bg-white"
                   />
                 </div>
                 <div>
@@ -1119,11 +1116,10 @@ export default function AdminDashboard() {
                   </label>
                   <input
                     type="text"
-                    required
                     value={blockStaff}
                     onChange={(e) => setBlockStaff(e.target.value)}
                     placeholder="cth: Ahmad Safwan & Nurul Izzah"
-                    className="w-full border border-purple-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 mt-1 bg-purple-50"
+                    className="w-full border border-purple-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 mt-1 bg-purple-50 focus:bg-white"
                   />
                 </div>
               </div>
@@ -1181,7 +1177,7 @@ export default function AdminDashboard() {
                   placeholder="Bahan lain / Catatan tambahan (cth: Perencah Khas 2 paket)"
                   value={blockCustomIngredients}
                   onChange={(e) => setBlockCustomIngredients(e.target.value)}
-                  className="w-full border border-slate-300 p-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-500 bg-white"
+                  className="w-full border border-slate-300 p-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 bg-white"
                 />
               </div>
 
