@@ -683,7 +683,8 @@ export default function Home() {
               <ol className="list-decimal pl-5 space-y-2.5">
                 <li><strong>Slot Masa Tempahan:</strong> Setiap tempahan slot dihadkan mengikut waktu yang telah dipilih sahaja (8:00 AM - 9:00 PM). Sila patuhi tempoh masa penggunaan dapur.</li>
                 <li><strong>Kebersihan Ruang Memasak:</strong> Pastikan ruang dapur, sinki, meja dan peralatan yang digunakan dicuci, dilap dan dibersihkan semula selepas selesai.</li>
-                <li><strong>Keselamatan Suis Elektrik:</strong> Pastikan semua suis peralatan elektrik dipatikan dan dicabut selepas selesai menggunakan dapur.</li>
+                <li><strong>Grease Trap:</strong> Pastikan grease trap dibersihkan secara berkala untuk mengelakkan penumpukan lemak.</li>
+                <li><strong>Keselamatan Suis Elektrik:</strong> Pastikan semua suis peralatan elektrik dimatikan dan dicabut selepas selesai menggunakan dapur.</li>
                 <li><strong>Log / Rekod Bahan Diguna:</strong> Sila rekodkan sebarang bahan masakan yang diambil menerusi butang <em>"Log / Rekod Bahan Diguna"</em> untuk tujuan kemaskini inventori.</li>
                 <li><strong>Tanggungjawab & Kerosakan:</strong> Jaga keselamatan peralatan dapur. Laporkan sebarang isu atau kerosakan peralatan dengan segera kepada PIC/EXCO bertugas.</li>
               </ol>
