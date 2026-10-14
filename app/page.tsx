@@ -6,7 +6,7 @@ import { TIME_SLOTS, getSlotStatus } from '@/lib/utils';
 import {
   Calendar, Clock, CheckCircle, AlertCircle, X, Utensils, Carrot, Printer,
   RefreshCw, PhoneCall, Search, Megaphone, ShoppingBag, KeyRound, Phone,
-  ChevronLeft, ChevronRight, BookOpen, ShieldCheck, Lock, UserCheck
+  ChevronLeft, ChevronRight, BookOpen, ShieldCheck, Lock, UserCheck, Sparkles
 } from 'lucide-react';
 
 interface BookedSlotInfo {
@@ -34,13 +34,16 @@ export default function Home() {
   const [bookedSlots, setBookedSlots] = useState<BookedSlotInfo[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
-  // Pop-up Tatacara Penggunaan Dapur (Awal Masuk)
+  // Loading Skeleton State
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  // Pop-up Tatacara Penggunaan Dapur
   const [showRulesModal, setShowRulesModal] = useState(true);
 
   // Pop-up Info Slot Diblok Pentadbiran
   const [blockedSlotInfo, setBlockedSlotInfo] = useState<{ time: string; reason: string; staff: string; ingredients: string } | null>(null);
 
-  // Search & Multiple Noticeboard State
+  // Noticeboard State
   const [activeNotices, setActiveNotices] = useState<string[]>([]);
   const [currentNoticeIndex, setCurrentNoticeIndex] = useState(0);
 
@@ -81,7 +84,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Kemaskini Waktu Semasa Setiap Minit
   useEffect(() => {
     const updateTime = () => setNow(new Date());
     updateTime();
@@ -94,8 +96,8 @@ export default function Home() {
 
   const fetchData = async () => {
     if (!selectedDate) return;
+    setIsDataLoading(true);
 
-    // Fetch All Active Notices
     const { data: noticeData } = await supabase
       .from('notices')
       .select('content')
@@ -108,7 +110,6 @@ export default function Home() {
       setActiveNotices([]);
     }
 
-    // Fetch Tempahan
     const { data: bookingData } = await supabase
       .from('bookings')
       .select('time_slot, full_name, matrix_number, items_used')
@@ -135,29 +136,26 @@ export default function Home() {
 
     const { data: contactData } = await supabase.from('contacts').select('*').order('created_at', { ascending: true });
     if (contactData) setContactsList(contactData);
+
+    setIsDataLoading(false);
   };
 
   useEffect(() => {
     fetchData();
   }, [location, selectedDate]);
 
-  // RESET INDEKS SETIAP KALI AKTIF NOTICES BERUBAH
   useEffect(() => {
     setCurrentNoticeIndex(0);
   }, [activeNotices.length]);
 
-  // AUTO ROTATE NOTICEBOARD SETIAP 10 SAAT
   useEffect(() => {
     if (activeNotices.length <= 1) return;
-
     const timer = setInterval(() => {
       setCurrentNoticeIndex((prevIndex) => (prevIndex + 1) % activeNotices.length);
     }, 10000);
-
     return () => clearInterval(timer);
   }, [activeNotices.length]);
 
-  // Submit Tempahan Slot
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlot) return;
@@ -204,7 +202,6 @@ export default function Home() {
     }
   };
 
-  // Submit Log Bahan Diguna
   const handleLogIngredientsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!logMatrix || !logCode) {
@@ -213,7 +210,6 @@ export default function Home() {
     }
 
     setLogLoading(true);
-
     const usedIngredientsPayload: any[] = [];
     
     Object.entries(selectedIngQty).forEach(([id, qty]) => {
@@ -319,7 +315,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-8">
+    <main className="min-h-screen bg-slate-100 pb-24 md:pb-8">
       
       <style>{`
         @media print {
@@ -332,11 +328,45 @@ export default function Home() {
         }
       `}</style>
 
-      <div className="max-w-5xl mx-auto space-y-6 no-print-area">
+      {/* 1. STICKY HEADER BERKILAT (GLASSMORPHISM) */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-2xs no-print-area">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <img src="/logo-khar.png" alt="Logo KHAR" className="h-9 w-auto object-contain" />
+            <div>
+              <h1 className="text-sm md:text-base font-black text-slate-900 leading-tight">Dapur Siswa Madani</h1>
+              <p className="text-[10px] md:text-xs font-bold text-blue-800">KHAR, UPSI</p>
+            </div>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              onClick={() => setShowLogModal(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" /> Log Bahan
+            </button>
+            <button
+              onClick={() => setShowCancelModal(true)}
+              className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Batal
+            </button>
+            <button
+              onClick={() => setShowRulesModal(true)}
+              className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-blue-600" /> Tatacara
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-5xl mx-auto space-y-5 p-4 no-print-area">
         
         {/* BANNER NOTICEBOARD */}
         {activeNotices.length > 0 && (
-          <div className="bg-amber-500 text-slate-950 p-4 rounded-2xl shadow-md border-2 border-amber-600 flex items-center justify-between gap-3 transition-all duration-500">
+          <div className="bg-amber-500 text-slate-950 p-4 rounded-2xl shadow-md border-2 border-amber-600 flex items-center justify-between gap-3 transition-all">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <Megaphone className="w-6 h-6 shrink-0 mt-0.5 animate-bounce text-slate-950" />
               <div className="space-y-0.5 min-w-0 flex-1">
@@ -375,101 +405,78 @@ export default function Home() {
           </div>
         )}
 
-        {/* Header Utama */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
-            <img src="/logo-khar.png" alt="Logo KHAR" className="h-16 md:h-20 object-contain" />
-            <div className="text-center space-y-1">
-              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Sistem Tempahan Dapur Siswa Madani</h1>
-              <p className="text-blue-800 font-bold text-xs md:text-sm">Kolej Harun Aminurrashid (KHAR), UPSI</p>
-              
-              <div className="pt-2 flex justify-center gap-2 flex-wrap">
-                <button
-                  onClick={() => setShowLogModal(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs"
-                >
-                  <ShoppingBag className="w-4 h-4" /> Log / Rekod Bahan Diguna
-                </button>
-                <button
-                  onClick={() => setShowCancelModal(true)}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Batal Tempahan
-                </button>
-                <button
-                  onClick={() => setShowRulesModal(true)}
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-blue-600" /> Tatacara Dapur
-                </button>
-              </div>
-            </div>
-            <img src="/logo-dapur-siswa.jpg" alt="Logo Dapur Siswa" className="h-16 md:h-20 object-contain" />
-          </div>
-        </div>
-
         {/* Pemilihan Blok & Tarikh */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
-            <button onClick={() => setLocation('Blok 4')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold ${location === 'Blok 4' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-700'}`}>Dapur Blok 4</button>
-            <button onClick={() => setLocation('Blok 6')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold ${location === 'Blok 6' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-700'}`}>Dapur Blok 6</button>
+            <button onClick={() => setLocation('Blok 4')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-xs md:text-sm font-extrabold transition ${location === 'Blok 4' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'}`}>Dapur Blok 4</button>
+            <button onClick={() => setLocation('Blok 6')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-xs md:text-sm font-extrabold transition ${location === 'Blok 6' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'}`}>Dapur Blok 6</button>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Calendar className="w-5 h-5 text-slate-600" />
-            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="border border-slate-300 p-2 rounded-xl text-slate-900 font-bold text-sm bg-white" />
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Calendar className="w-4 h-4 text-slate-500" />
+            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="border border-slate-300 p-2 rounded-xl text-slate-900 font-extrabold text-xs bg-white" />
           </div>
         </div>
 
         {/* Notification Alert */}
         {message && (
-          <div className={`p-4 rounded-xl flex items-center gap-2 text-sm font-bold ${message.type === 'success' ? 'bg-[#00A354]/15 text-slate-900 border border-[#00A354]' : 'bg-[#FF2900]/15 text-slate-900 border border-[#FF2900]'}`}>
-            {message.type === 'success' ? <CheckCircle className="w-5 h-5 text-[#00A354]" /> : <AlertCircle className="w-5 h-5 text-[#FF2900]" />}
+          <div className={`p-4 rounded-2xl flex items-center gap-2 text-xs md:text-sm font-extrabold ${message.type === 'success' ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' : 'bg-rose-50 text-rose-900 border border-rose-300'}`}>
+            {message.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
             <span>{message.text}</span>
           </div>
         )}
 
-        {/* Grid Slot Masa */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        {/* 2. GRID SLOT MASA MESRA IBU JARI & SKELETON LOADING */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-1">
             <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-slate-700" /> Pilih Slot Masa Bagi ({location})
+              <Clock className="w-4 h-4 text-slate-700" /> Pilih Slot Masa bagi ({location})
             </h2>
-            <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border">
-              Waktu Operasi: 8:00 AM – 10:00 PM (1 Slot = 30 Minit)
+            <span className="text-[11px] font-black text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+              Waktu Operasi: 8:00 AM – 9:00 PM (1 Slot = 30 Minit)
             </span>
           </div>
-          
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-7 gap-2">
-            {TIME_SLOTS.map((slot) => {
-              const status = getSlotStatus(selectedDate, slot, bookedSlotTimes, now);
-              const isAdminBlock = bookedSlots.some(b => b.time_slot === slot && b.matrix_number === 'ADMIN');
 
-              return (
-                <button
-                  key={slot}
-                  onClick={() => handleSlotClick(slot, status)}
-                  className={`p-2.5 rounded-xl text-xs font-black flex flex-col items-center justify-center border transition ${
-                    status === 'PAST' ? 'bg-slate-200 text-slate-600 cursor-not-allowed border-slate-300' :
-                    isAdminBlock ? 'bg-purple-700 text-white cursor-pointer hover:brightness-110 border-purple-900' :
-                    status === 'BOOKED' ? 'bg-[#FF2900] text-white cursor-not-allowed border-rose-700' :
-                    selectedSlot === slot ? 'bg-blue-600 text-white ring-4 ring-blue-200 scale-105 border-blue-700' :
-                    'bg-[#00A354] text-white cursor-pointer hover:brightness-95 border-emerald-700'
-                  }`}
-                >
-                  <span className="text-xs font-extrabold">{slot}</span>
-                  <span className="text-[9px] font-bold mt-0.5 px-1 rounded bg-black/20">
-                    {status === 'PAST' ? 'Lepas' : isAdminBlock ? 'Diblok' : status === 'BOOKED' ? 'Penuh' : 'Boleh'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {isDataLoading ? (
+            /* SKELETON LOADING GRID */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-7 gap-2.5">
+              {Array.from({ length: 26 }).map((_, idx) => (
+                <div key={idx} className="h-14 bg-slate-200 rounded-xl animate-pulse"></div>
+              ))}
+            </div>
+          ) : (
+            /* REAL SLOT GRID (2-Column di Mobile, Mesra Ibu Jari) */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-7 gap-2.5">
+              {TIME_SLOTS.map((slot) => {
+                const status = getSlotStatus(selectedDate, slot, bookedSlotTimes, now);
+                const isAdminBlock = bookedSlots.some(b => b.time_slot === slot && b.matrix_number === 'ADMIN');
+
+                return (
+                  <button
+                    key={slot}
+                    onClick={() => handleSlotClick(slot, status)}
+                    className={`min-h-[52px] p-2 rounded-xl text-xs font-black flex flex-col items-center justify-center border transition shadow-2xs ${
+                      status === 'PAST' ? 'bg-slate-200 text-slate-500 cursor-not-allowed border-slate-300' :
+                      isAdminBlock ? 'bg-purple-700 text-white cursor-pointer hover:brightness-110 border-purple-900' :
+                      status === 'BOOKED' ? 'bg-rose-600 text-white cursor-not-allowed border-rose-700' :
+                      selectedSlot === slot ? 'bg-blue-600 text-white ring-4 ring-blue-200 scale-105 border-blue-700' :
+                      'bg-emerald-600 text-white cursor-pointer hover:brightness-95 border-emerald-700'
+                    }`}
+                  >
+                    <span className="text-xs font-black tracking-wide">{slot}</span>
+                    <span className="text-[9px] font-extrabold mt-0.5 px-1.5 py-0.5 rounded bg-black/20">
+                      {status === 'PAST' ? 'Lepas' : isAdminBlock ? 'Diblok' : status === 'BOOKED' ? 'Penuh' : 'Boleh'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* PERALATAN & BAHAN */}
         <div className="grid md:grid-cols-2 gap-6">
           
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
             <h3 className="font-bold text-slate-900 flex items-center gap-2 text-sm border-b pb-2">
               <Utensils className="w-4 h-4 text-blue-600" /> Peralatan Dapur
             </h3>
@@ -477,62 +484,78 @@ export default function Home() {
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
               <input type="text" placeholder="Cari peralatan..." value={equipSearch} onChange={(e) => setEquipSearch(e.target.value)} className="w-full border border-slate-300 p-1.5 pl-8 rounded-xl text-xs text-slate-900 placeholder:text-slate-500 bg-slate-50 font-semibold" />
             </div>
-            <div className="grid grid-cols-2 gap-2.5 max-h-60 overflow-y-auto">
-              {filteredEquipment.map(eq => (
-                <div key={eq.id} className="p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs flex justify-between items-center font-extrabold text-slate-900">
-                  <span className="leading-tight pr-1">{eq.item_name}</span>
-                  <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] shrink-0">{eq.quantity} unit</span>
-                </div>
-              ))}
-            </div>
+
+            {isDataLoading ? (
+              <div className="space-y-2">
+                <div className="h-10 bg-slate-200 rounded-xl animate-pulse"></div>
+                <div className="h-10 bg-slate-200 rounded-xl animate-pulse"></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5 max-h-60 overflow-y-auto">
+                {filteredEquipment.map(eq => (
+                  <div key={eq.id} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex justify-between items-center font-extrabold text-slate-900">
+                    <span className="leading-tight pr-1">{eq.item_name}</span>
+                    <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] shrink-0">{eq.quantity} unit</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
             <h3 className="font-bold text-slate-900 flex items-center gap-2 text-sm border-b pb-2">
-              <Carrot className="w-4 h-4 text-[#00A354]" /> Baki Inventori Bahan ({location})
+              <Carrot className="w-4 h-4 text-emerald-600" /> Baki Inventori Bahan ({location})
             </h3>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
               <input type="text" placeholder="Cari bahan..." value={ingSearch} onChange={(e) => setIngSearch(e.target.value)} className="w-full border border-slate-300 p-1.5 pl-8 rounded-xl text-xs text-slate-900 placeholder:text-slate-500 bg-slate-50 font-semibold" />
             </div>
-            <div className="space-y-3 max-h-60 overflow-y-auto">
-              {INGREDIENT_CATEGORIES.map(cat => {
-                const items = filteredIngredients.filter(i => (i.category || 'Bahan Basah') === cat);
-                if (items.length === 0) return null;
-                return (
-                  <div key={cat} className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-purple-100 uppercase bg-purple-900 px-2 py-0.5 rounded-md inline-block">{cat}</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {items.map(ing => {
-                        const isCountable = ing.is_countable;
-                        const isOut = isCountable ? (ing.stock_quantity || 0) <= 0 : ing.quantity === 'Tiada';
-                        
-                        return (
-                          <div key={ing.id} className={`p-2 border rounded-xl text-xs flex justify-between items-center font-extrabold ${isOut ? 'bg-rose-100 border-rose-300 text-rose-950' : 'bg-slate-100 border-slate-300 text-slate-900'}`}>
-                            <span className="leading-tight pr-1 text-slate-900 font-extrabold">{ing.item_name}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-md text-white font-black shrink-0 ${isOut ? 'bg-rose-600' : 'bg-emerald-700'}`}>
-                              {isCountable ? `${ing.stock_quantity || 0} ${ing.unit_label || 'unit'}` : (ing.quantity || 'Ada')}
-                            </span>
-                          </div>
-                        );
-                      })}
+
+            {isDataLoading ? (
+              <div className="space-y-2">
+                <div className="h-10 bg-slate-200 rounded-xl animate-pulse"></div>
+                <div className="h-10 bg-slate-200 rounded-xl animate-pulse"></div>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {INGREDIENT_CATEGORIES.map(cat => {
+                  const items = filteredIngredients.filter(i => (i.category || 'Bahan Basah') === cat);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={cat} className="space-y-1">
+                      <span className="text-[10px] font-extrabold text-purple-100 uppercase bg-purple-900 px-2 py-0.5 rounded-md inline-block">{cat}</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {items.map(ing => {
+                          const isCountable = ing.is_countable;
+                          const isOut = isCountable ? (ing.stock_quantity || 0) <= 0 : ing.quantity === 'Tiada';
+                          
+                          return (
+                            <div key={ing.id} className={`p-2 border rounded-xl text-xs flex justify-between items-center font-extrabold ${isOut ? 'bg-rose-50 border-rose-200 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
+                              <span className="leading-tight pr-1 text-slate-900 font-extrabold">{ing.item_name}</span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-md text-white font-black shrink-0 ${isOut ? 'bg-rose-600' : 'bg-emerald-700'}`}>
+                                {isCountable ? `${ing.stock_quantity || 0} ${ing.unit_label || 'unit'}` : (ing.quantity || 'Ada')}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
         </div>
 
         {/* HUBUNGI PIC / CONTACTS */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
           <h3 className="font-bold text-slate-900 flex items-center gap-2 text-sm border-b pb-2">
             <PhoneCall className="w-4 h-4 text-emerald-600" /> Hubungi PIC / Nombor Bantuan Kecemasan Dapur
           </h3>
           
           <p className="text-xs text-slate-600 font-medium">
-            Sila hubungi nombor berikut jika memerlukan bantuan peralatan, masalah kebersihan atau sebarang isu di dapur:
+            Sila hubungi nombor berikut jika memerlukan bantuan peralatan, masalah kebersihan, tong gas habis, atau sebarang isu di dapur:
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -547,7 +570,7 @@ export default function Home() {
                   </div>
                   <a
                     href={`tel:${c.phone_number}`}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 text-xs shrink-0 shadow-xs"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs shrink-0 shadow-xs"
                   >
                     <Phone className="w-3.5 h-3.5" /> {c.phone_number}
                   </a>
@@ -563,6 +586,33 @@ export default function Home() {
           <p className="text-[11px] text-slate-500 font-semibold mt-1">Designed by: Astranova</p>
         </footer>
 
+      </div>
+
+      {/* 3. STICKY BOTTOM BAR MELEKAT DI TELEFON (MOBILE ONLY) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-lg border-t border-slate-200 p-2.5 shadow-2xl flex justify-around items-center no-print-area">
+        <button
+          onClick={() => setShowLogModal(true)}
+          className="flex-1 max-w-[110px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition shadow-xs"
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>Log Bahan</span>
+        </button>
+
+        <button
+          onClick={() => setShowCancelModal(true)}
+          className="flex-1 max-w-[110px] py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Batal</span>
+        </button>
+
+        <button
+          onClick={() => setShowRulesModal(true)}
+          className="flex-1 max-w-[110px] py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-xl text-[11px] font-extrabold flex flex-col items-center justify-center gap-0.5 transition"
+        >
+          <BookOpen className="w-4 h-4 text-blue-600" />
+          <span>Tatacara</span>
+        </button>
       </div>
 
       {/* POPUP MODAL: INFO SLOT DIBLOK PENTADBIRAN */}
@@ -631,7 +681,7 @@ export default function Home() {
                 Peraturan & Etika Yang Wajib Dipatuhi:
               </p>
               <ol className="list-decimal pl-5 space-y-2.5">
-                <li><strong>Slot Masa Tempahan:</strong> Setiap tempahan slot dihadkan mengikut waktu yang telah dipilih sahaja. Sila patuhi tempoh masa penggunaan dapur.</li>
+                <li><strong>Slot Masa Tempahan:</strong> Setiap tempahan slot dihadkan mengikut waktu yang telah dipilih sahaja (8:00 AM - 9:00 PM). Sila patuhi tempoh masa penggunaan dapur.</li>
                 <li><strong>Kebersihan Ruang Memasak:</strong> Pastikan ruang dapur, sinki, meja dan peralatan yang digunakan dicuci, dilap dan dibersihkan semula selepas selesai.</li>
                 <li><strong>Keselamatan Suis Elektrik:</strong> Pastikan semua suis peralatan elektrik dipatikan dan dicabut selepas selesai menggunakan dapur.</li>
                 <li><strong>Log / Rekod Bahan Diguna:</strong> Sila rekodkan sebarang bahan masakan yang diambil menerusi butang <em>"Log / Rekod Bahan Diguna"</em> untuk tujuan kemaskini inventori.</li>
@@ -675,7 +725,7 @@ export default function Home() {
                     placeholder="No. Matrik"
                     value={logMatrix}
                     onChange={(e) => setLogMatrix(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 bg-white focus:ring-2 focus:ring-emerald-500"
+                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 bg-white"
                   />
                   <input
                     type="text"
@@ -683,7 +733,7 @@ export default function Home() {
                     placeholder="KOD TEMPAHAN"
                     value={logCode}
                     onChange={(e) => setLogCode(e.target.value)}
-                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-mono font-bold text-slate-900 placeholder:text-slate-500 bg-white uppercase focus:ring-2 focus:ring-emerald-500"
+                    className="w-full border border-slate-300 p-2.5 rounded-xl text-xs font-mono font-bold text-slate-900 placeholder:text-slate-500 bg-white uppercase"
                   />
                 </div>
               </div>
@@ -723,14 +773,14 @@ export default function Home() {
                                     placeholder="Qty"
                                     value={currentQty || ''}
                                     onChange={(e) => setSelectedIngQty({ ...selectedIngQty, [ing.id]: Number(e.target.value) })}
-                                    className="w-16 border border-slate-400 p-1.5 rounded-lg text-xs font-black text-center text-slate-900 placeholder:text-slate-500 bg-slate-100 shrink-0 focus:bg-white"
+                                    className="w-16 border border-slate-400 p-1.5 rounded-lg text-xs font-black text-center text-slate-900 placeholder:text-slate-500 bg-slate-100 shrink-0"
                                   />
                                 ) : (
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
                                     onChange={(e) => setSelectedPantryCheck({ ...selectedPantryCheck, [ing.id]: e.target.checked })}
-                                    className="w-4 h-4 rounded text-[#00A354] shrink-0"
+                                    className="w-4 h-4 rounded text-emerald-600 shrink-0"
                                   />
                                 )}
                               </div>
@@ -848,7 +898,7 @@ export default function Home() {
                 <img src="/logo-dapur-siswa.jpg" alt="Logo Dapur Siswa" className="h-8 object-contain" />
               </div>
               <h3 className="font-extrabold text-slate-900 text-lg">PAS DAPUR SISWA MADANI</h3>
-              <span className="px-3 py-1 bg-[#00A354]/15 text-[#00A354] border border-[#00A354]/40 rounded-full text-xs font-extrabold inline-block">
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-extrabold inline-block">
                 CONFIRMED & VALID
               </span>
             </div>
@@ -857,7 +907,7 @@ export default function Home() {
               <p><strong>Nama Pelajar:</strong> {latestPass.full_name}</p>
               <p><strong>No. Matrik:</strong> {latestPass.matrix_number}</p>
               <p><strong>Lokasi Dapur:</strong> <span className="text-blue-700 font-bold">{latestPass.location}</span></p>
-              <p><strong>Tarikh & Masa:</strong> <span className="text-[#00A354] font-bold">{latestPass.booking_date} ({latestPass.time_slot})</span></p>
+              <p><strong>Tarikh & Masa:</strong> <span className="text-emerald-700 font-bold">{latestPass.booking_date} ({latestPass.time_slot})</span></p>
               <p><strong>Kod Tempahan / Batal:</strong> <code className="bg-slate-200 px-2 py-0.5 rounded font-mono font-bold text-slate-900">{latestPass.cancellation_code}</code></p>
             </div>
 
